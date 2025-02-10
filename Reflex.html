@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Live streaming with integrated chat. Fully responsive and clean dark mode UI.">
+    <meta name="keywords" content="Live Stream, Chat, Video Streaming, Interactive, WebRTC">
+    <meta name="author" content="Your Name">
+    <meta property="og:title" content="Live Stream & Chat">
+    <meta property="og:description" content="Stream live video with an interactive chat feature, fully responsive and mobile-friendly.">
+    <meta property="og:image" content="thumbnail.jpg">
+    <meta property="og:type" content="website">
+    <title>Live Stream & Chat</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        body { background: #121212; color: white; display: flex; flex-direction: column; align-items: center; height: 100vh; padding: 10px; }
+        h1 { text-align: center; margin-bottom: 10px; }
+        
+        /* Top buttons container */
+        #top-buttons { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; justify-content: center; }
+        .top-button { padding: 8px 12px; border: none; cursor: pointer; font-size: 14px; border-radius: 5px; }
+        #navigate-test { background: #ff9800; color: white; }
+        #start-stream { background: #28a745; color: white; }
+        #open-options { background: #6c757d; color: white; }
+        #toggle-chat { background: #007bff; color: white; }
+
+        /* Main container */
+        #container { display: flex; flex-wrap: wrap; width: 90%; max-width: 1200px; height: 80vh; border-radius: 10px; overflow: hidden; border: 2px solid #333; }
+        #video-container { flex: 3; background: black; display: flex; align-items: center; justify-content: center; }
+        video { width: 100%; height: auto; }
+
+        /* Chat */
+        #chat-container { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; border-left: 2px solid #333; transition: width 0.3s; min-width: 250px; }
+        #chat-header { padding: 10px; background: #222; display: flex; justify-content: space-between; align-items: center; }
+        #marketplace { text-align: center; padding: 10px; background: #007bff; color: white; }
+        #chat-box { flex: 1; overflow-y: auto; padding: 10px; }
+        #chat-box p { background: #333; padding: 5px; border-radius: 5px; margin-bottom: 5px; }
+        #chat-input { display: flex; padding: 10px; border-top: 2px solid #333; }
+        input, button { padding: 8px; border: none; }
+        input { flex: 1; background: #222; color: #fff; }
+        button { background: #007bff; color: #fff; cursor: pointer; }
+        button:hover { background: #0056b3; }
+
+        /* Share Link */
+        #share-container { margin-top: 10px; text-align: center; }
+        #share-link { background: #444; padding: 5px; border-radius: 5px; display: inline-block; cursor: pointer; }
+
+        /* Options menu */
+        #options-menu { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #1e1e1e; padding: 20px; border-radius: 10px; text-align: center; border: 2px solid #333; }
+        #options-menu button { margin-top: 10px; width: 100%; }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            #container { flex-direction: column; height: auto; }
+            #video-container { flex: none; width: 100%; }
+            #chat-container { flex: none; width: 100%; min-width: auto; }
+            #top-buttons { flex-direction: column; align-items: center; gap: 5px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="top-buttons">
+        <button id="navigate-test" class="top-button" onclick="location.href='Hop.html'">Back to HOP</button>
+        <button id="start-stream" class="top-button" onclick="startStream()">Start Stream</button>
+        <button id="open-options" class="top-button" onclick="openOptions()">Options</button>
+        <button id="toggle-chat" class="top-button" onclick="toggleChat()">Toggle Chat</button>
+    </div>
+
+    <h1>Reflex.TV</h1>
+
+    <div id="container">
+        <div id="video-container">
+            <video id="video" autoplay playsinline></video>
+        </div>
+        <div id="chat-container">
+            <div id="chat-header">
+                <span>Live Chat</span>
+            </div>
+            <div id="marketplace"></div>
+            <div id="chat-box"></div>
+            <div id="chat-input">
+                <input type="text" id="message" placeholder="Type a message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="share-container">
+        Share Link: <span id="share-link" onclick="copyShareLink()">Generating...</span>
+    </div>
+
+    <div id="options-menu">
+        <h2>Options</h2>
+        <button onclick="clearHistory()">Clear History</button>
+        <button onclick="closeOptions()">Close</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.11.0/simple-peer.min.js"></script>
+
+    <script>
+        let username = localStorage.getItem("username") || prompt("Enter your name:");
+        if (!username) username = "Guest" + Math.floor(Math.random() * 1000);
+        localStorage.setItem("username", username);
+
+        const peerConnections = {};
+        let localStream;
+
+        function getStreamID() {
+            let streamID = document.cookie.replace(/(?:(?:^|.*;\s*)streamID\s*\=\s*([^;]*).*$)|^.*$/, "$1");
+            if (!streamID) {
+                streamID = Math.random().toString(36).substr(2, 9);
+                document.cookie = `streamID=${streamID}; path=/; max-age=86400`;
+            }
+            return streamID;
+        }
+
+        function updateShareLink() {
+            const streamID = getStreamID();
+            const shareURL = `${window.location.origin}${window.location.pathname}?stream=${streamID}`;
+            document.getElementById("share-link").textContent = shareURL;
+        }
+
+        function copyShareLink() {
+            const shareURL = document.getElementById("share-link").textContent;
+            navigator.clipboard.writeText(shareURL).then(() => alert("Link copied!"));
+        }
+
+        function startStream() {
+            navigator.mediaDevices.getUserMedia({ video: true, audio: true }).then(stream => {
+                localStream = stream;
+                document.getElementById("video").srcObject = stream;
+
+                // Create a new peer connection for each user connecting to this stream
+                const streamID = getStreamID();
+                const peer = new SimplePeer({
+                    initiator: true,
+                    trickle: false,
+                    stream: stream
+                });
+
+                peer.on('signal', signalData => {
+                    // Send signal data to other users (you need some mechanism to broadcast this)
+                    console.log('Signal data:', signalData);
+                });
+
+                peer.on('stream', remoteStream => {
+                    // Display the remote stream from another user
+                    const remoteVideo = document.createElement('video');
+                    remoteVideo.srcObject = remoteStream;
+                    remoteVideo.autoplay = true;
+                    remoteVideo.playsinline = true;
+                    document.getElementById("video-container").appendChild(remoteVideo);
+                });
+
+                peerConnections[streamID] = peer;
+            }).catch(err => alert("Failed to access webcam."));
+        }
+
+        function sendMessage() {
+            let message = document.getElementById("message").value;
+            if (message.trim()) {
+                let chatBox = document.getElementById("chat-box");
+                let timestamp = new Date().toLocaleTimeString();
+                let msgElement = document.createElement("p");
+                msgElement.innerHTML = `<strong>${username}</strong> [${timestamp}]: ${message}`;
+                chatBox.appendChild(msgElement);
+                document.getElementById("message").value = "";
+            }
+        }
+
+        function toggleChat() {
+            const chatContainer = document.getElementById("chat-container");
+            chatContainer.style.display = chatContainer.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        function openOptions() {
+            document.getElementById("options-menu").style.display = 'block';
+        }
+
+        function closeOptions() {
+            document.getElementById("options-menu").style.display = 'none';
+        }
+
+        function clearHistory() {
+            document.getElementById("chat-box").innerHTML = "";
+        }
+
+        updateShareLink();
+    </script>
+
+</body>
+</html>
